@@ -2,132 +2,153 @@
 
 namespace Hhxsv5\LaravelS\Illuminate;
 
-use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Hhxsv5\LaravelS\Illuminate\Cleaners\CleanerInterface;
+use Hhxsv5\LaravelS\Illuminate\Cleaners\ConfigCleaner;
+use Hhxsv5\LaravelS\Illuminate\Cleaners\CookieCleaner;
+use Hhxsv5\LaravelS\Illuminate\Cleaners\RequestCleaner;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request as IlluminateRequest;
-use Illuminate\Support\Facades\Facade;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class Laravel
 {
+    /**@var Container */
     protected $app;
 
-    /**
-     * @var HttpKernel $laravelKernel
-     */
-    protected $laravelKernel;
+    /**@var Container */
+    protected $snapshotApp;
 
-    /**
-     * @var \ReflectionObject $laravelReflect
-     */
-    protected $laravelReflect;
+    /**@var \ReflectionObject */
+    protected $reflectionApp;
 
-    protected static $snapshotKeys = ['config', 'cookie'];
+    /**@var int */
+    protected $registerNumberOfParameters;
 
-    /**
-     * @var array $snapshots
-     */
-    protected $snapshots = [];
+    /**@var HttpKernel */
+    protected $kernel;
 
+    /**@var array */
     protected $conf = [];
 
+    /**@var array */
     protected static $staticBlackList = [
         '/index.php'  => 1,
         '/.htaccess'  => 1,
         '/web.config' => 1,
     ];
 
+    /**@var array */
     private $rawGlobals = [];
+
+    /**@var array */
+    protected static $defaultCleaners = [
+        ConfigCleaner::class,
+        CookieCleaner::class,
+        RequestCleaner::class,
+    ];
 
     public function __construct(array $conf = [])
     {
         $this->conf = $conf;
-    }
 
-    public function prepareLaravel()
-    {
-        $this->autoload();
-        $this->createApp();
-        $this->createKernel();
-        $this->setLaravel();
-        $this->consoleKernelBootstrap();
-        $this->saveSnapshots();
-    }
-
-    protected function autoload()
-    {
-        $autoload = $this->conf['rootPath'] . '/bootstrap/autoload.php';
-        if (file_exists($autoload)) {
-            require_once $autoload;
-        } else {
-            require_once $this->conf['rootPath'] . '/vendor/autoload.php';
-        }
-    }
-
-    protected function createApp()
-    {
-        $this->app = require $this->conf['rootPath'] . '/bootstrap/app.php';
-    }
-
-    protected function createKernel()
-    {
-        if (!$this->conf['isLumen']) {
-            $this->laravelKernel = $this->app->make(HttpKernel::class);
-        }
-    }
-
-    protected function setLaravel()
-    {
-        // Load configuration laravel.php manually for Lumen
-        if ($this->conf['isLumen'] && file_exists($this->conf['rootPath'] . '/config/laravels.php')) {
-            $this->app->configure('laravels');
-        }
-
+        // Merge $_ENV $_SERVER
         $server = isset($this->conf['_SERVER']) ? $this->conf['_SERVER'] : [];
         $env = isset($this->conf['_ENV']) ? $this->conf['_ENV'] : [];
         $this->rawGlobals['_SERVER'] = array_merge($_SERVER, $server);
         $this->rawGlobals['_ENV'] = array_merge($_ENV, $env);
+
+        // Add default cleaners
+        $this->conf['cleaners'] = isset($this->conf['cleaners']) ? $this->conf['cleaners'] : [];
+        $this->conf['cleaners'] = array_unique(array_merge($this->conf['cleaners'], self::$defaultCleaners));
     }
 
-    protected function consoleKernelBootstrap()
+    public function prepareLaravel()
     {
-        if ($this->conf['isLumen']) {
-            if (Facade::getFacadeApplication() === null) {
-                $this->app->withFacades();
-            }
-        } else {
-            $this->app->make(ConsoleKernel::class)->bootstrap();
+        list($this->app, $this->kernel) = $this->createAppKernel();
+        $this->snapshotApp = clone $this->app;
+
+        $this->reflectionApp = new \ReflectionObject($this->app);
+        $this->registerNumberOfParameters = $this->reflectionApp->getMethod('register')->getNumberOfParameters();
+
+        // Save snapshots for app
+        $instances = $this->reflectionApp->getProperty('instances');
+        $instances->setAccessible(true);
+        $instances = array_merge($this->app->getBindings(), $instances->getValue($this->app));
+        foreach ($instances as $key => $value) {
+            $this->snapshotApp->offsetSet($key, is_object($value) ? clone $value : $value);
         }
     }
 
-    protected function saveSnapshots()
+    public function createAppKernel()
     {
-        $this->snapshots = [];
-        foreach (self::$snapshotKeys as $key) {
-            if (isset($this->app[$key])) {
-                if (is_object($this->app[$key])) {
-                    $this->snapshots[$key] = clone $this->app[$key];
-                } else {
-                    $this->snapshots[$key] = $this->app[$key];
+        // Register autoload
+        self::autoload($this->conf['root_path']);
+
+        // Make kernel for Laravel
+        $kernel = null;
+        $app = require $this->conf['root_path'] . '/bootstrap/app.php';
+        if (!$this->conf['is_lumen']) {
+            $kernel = $app->make(HttpKernel::class);
+        }
+
+        // Load all Configurations for Lumen
+        if ($this->conf['is_lumen']) {
+            $cfgPaths = [
+                // Framework default configuration
+                $this->conf['root_path'] . '/vendor/laravel/lumen-framework/config/',
+                // App configuration
+                $this->conf['root_path'] . '/config/',
+            ];
+            $keys = [];
+            foreach ($cfgPaths as $cfgPath) {
+                $configs = (array)glob($cfgPath . '*.php');
+                foreach ($configs as $config) {
+                    $config = substr(basename($config), 0, -4);
+                    $keys[$config] = $config;
                 }
             }
+            foreach ($keys as $key) {
+                $app->configure($key);
+            }
         }
 
-        if ($this->conf['isLumen']) {
-            $this->laravelReflect = new \ReflectionObject($this->app);
+        // Boot
+        if ($this->conf['is_lumen']) {
+            if (method_exists($app, 'boot')) {
+                $app->boot();
+            }
+        } else {
+            $app->make(ConsoleKernel::class)->bootstrap();
         }
+
+        // Bind singleton cleaners
+        foreach ($this->conf['cleaners'] as $cleaner) {
+            $app->singleton($cleaner, function ($app) use ($cleaner) {
+                if (!isset(class_implements($cleaner)[CleanerInterface::class])) {
+                    throw new \InvalidArgumentException(sprintf(
+                            '%s must implement the interface %s',
+                            $cleaner,
+                            CleanerInterface::class
+                        )
+                    );
+                }
+                return new $cleaner();
+            });
+        }
+
+        return [$app, $kernel];
     }
 
-    protected function applySnapshots()
+    public static function autoload($rootPath)
     {
-        foreach ($this->snapshots as $key => $value) {
-            if (is_object($value)) {
-                $this->app[$key] = clone $value;
-            } else {
-                $this->app[$key] = $value;
-            }
-            Facade::clearResolvedInstance($key);
+        $autoload = $rootPath . '/bootstrap/autoload.php';
+        if (file_exists($autoload)) {
+            require_once $autoload;
+        } else {
+            require_once $rootPath . '/vendor/autoload.php';
         }
     }
 
@@ -138,11 +159,9 @@ class Laravel
 
     public function handleDynamic(IlluminateRequest $request)
     {
-        $this->applySnapshots();
-
         ob_start();
 
-        if ($this->conf['isLumen']) {
+        if ($this->conf['is_lumen']) {
             $response = $this->app->dispatch($request);
             if ($response instanceof SymfonyResponse) {
                 $content = $response->getContent();
@@ -150,17 +169,17 @@ class Laravel
                 $content = (string)$response;
             }
 
-            $middleware = $this->laravelReflect->getProperty('middleware');
+            $middleware = $this->reflectionApp->getProperty('middleware');
             $middleware->setAccessible(true);
             if (!empty($middleware->getValue($this->app))) {
-                $callTerminableMiddleware = $this->laravelReflect->getMethod('callTerminableMiddleware');
+                $callTerminableMiddleware = $this->reflectionApp->getMethod('callTerminableMiddleware');
                 $callTerminableMiddleware->setAccessible(true);
                 $callTerminableMiddleware->invoke($this->app, $response);
             }
         } else {
-            $response = $this->laravelKernel->handle($request);
+            $response = $this->kernel->handle($request);
             $content = $response->getContent();
-            $this->laravelKernel->terminate($request, $response);
+            $this->kernel->terminate($request, $response);
         }
 
         // prefer content in response, secondly ob
@@ -180,16 +199,16 @@ class Laravel
             return false;
         }
 
-        $publicPath = $this->conf['staticPath'];
+        $publicPath = $this->conf['static_path'];
         $requestFile = $publicPath . $uri;
         if (is_file($requestFile)) {
-            return $this->createStaticResponse($requestFile, $request->header('if-modified-since'));
+            return $this->createStaticResponse($requestFile, $request);
         } elseif (is_dir($requestFile)) {
             $indexFile = $this->lookupIndex($requestFile);
             if ($indexFile === false) {
                 return false;
             } else {
-                return $this->createStaticResponse($indexFile, $request->header('if-modified-since'));
+                return $this->createStaticResponse($indexFile, $request);
             }
         } else {
             return false;
@@ -208,83 +227,64 @@ class Laravel
         return false;
     }
 
-    public function createStaticResponse($requestFile, $modifiedSince = null)
+    public function createStaticResponse($requestFile, IlluminateRequest $request)
     {
-        $code = SymfonyResponse::HTTP_OK;
-        $mtime = filemtime($requestFile);
-        if ($modifiedSince !== null) {
-            $modifiedSince = strtotime($modifiedSince);
-            if ($modifiedSince !== false && $modifiedSince >= $mtime) {
-                $code = SymfonyResponse::HTTP_NOT_MODIFIED;
-            }
-        }
-
-        $maxAge = 24 * 3600;
-        $rsp = new BinaryFileResponse($requestFile, $code);
-        $rsp->setLastModified(new \DateTime(date('Y-m-d H:i:s', $mtime)));
-        $rsp->setMaxAge($maxAge);
-        $rsp->setPrivate();
-        $rsp->setExpires(new \DateTime(date('Y-m-d H:i:s', time() + $maxAge)));
-        return $rsp;
+        $response = new BinaryFileResponse($requestFile);
+        $response->prepare($request);
+        $response->isNotModified($request);
+        return $response;
     }
 
-    public function reRegisterServiceProvider($providerCls, array $clearFacades = [])
+    protected function cleanProviders(array $providers)
     {
-        if (class_exists($providerCls, false)) {
-            if ($this->conf['isLumen']) {
-                $loadedProviders = $this->laravelReflect->getProperty('loadedProviders');
-                $loadedProviders->setAccessible(true);
-                $oldLoadedProviders = $loadedProviders->getValue($this->app);
-                unset($oldLoadedProviders[get_class(new $providerCls($this->app))]);
-                $loadedProviders->setValue($this->app, $oldLoadedProviders);
+        if ($this->conf['is_lumen']) {
+            $loadedProviders = $this->reflectionApp->getProperty('loadedProviders');
+            $loadedProviders->setAccessible(true);
+            $oldLoadedProviders = $loadedProviders->getValue($this->app);
+        }
+
+        foreach ($providers as $provider) {
+            if (class_exists($provider, false)) {
+                if ($this->conf['is_lumen']) {
+                    unset($oldLoadedProviders[get_class(new $provider($this->app))]);
+                }
+                switch ($this->registerNumberOfParameters) {
+                    case 1:
+                        $this->app->register($provider);
+                        break;
+                    case 2:
+                        $this->app->register($provider, true);
+                        break;
+                    case 3:
+                        $this->app->register($provider, [], true);
+                        break;
+                    default:
+                        throw new \RuntimeException('The number of parameters of the register method is unknown.');
+                }
             }
-            foreach ($clearFacades as $facade) {
-                Facade::clearResolvedInstance($facade);
-            }
-            $this->app->register($providerCls, [], true);
+        }
+
+        if ($this->conf['is_lumen']) {
+            $loadedProviders->setValue($this->app, $oldLoadedProviders);
         }
     }
 
-    public function cleanRequest(IlluminateRequest $request)
+    public function clean()
     {
-        // Clean laravel session
-        if ($request->hasSession()) {
-            $session = $request->getSession();
-            if (method_exists($session, 'clear')) {
-                $session->clear();
-            } elseif (method_exists($session, 'flush')) {
-                $session->flush();
-            }
-            // TODO: clear session for other versions
+        foreach ($this->conf['cleaners'] as $cleanerCls) {
+            /**@var CleanerInterface $cleaner */
+            $cleaner = $this->app->make($cleanerCls);
+            $cleaner->clean($this->app, $this->snapshotApp);
         }
 
-        // Re-register auth
-        $this->reRegisterServiceProvider('\Illuminate\Auth\AuthServiceProvider', ['auth', 'auth.driver']);
-        $this->reRegisterServiceProvider('\Illuminate\Auth\Passwords\PasswordResetServiceProvider', ['auth.password']);
-
-        // Re-register jwt auth
-        $this->reRegisterServiceProvider('\Tymon\JWTAuth\Providers\LaravelServiceProvider');
-        $this->reRegisterServiceProvider('\Tymon\JWTAuth\Providers\LumenServiceProvider');
-
-        // Re-register passport
-        $this->reRegisterServiceProvider('\Laravel\Passport\PassportServiceProvider');
-
-        // Re-register some singleton providers
-        foreach ($this->conf['registerProviders'] as $provider) {
-            $this->reRegisterServiceProvider($provider);
-        }
-
-        // Clear request
-        $this->app->forgetInstance('request');
-        Facade::clearResolvedInstance('request');
-
-        //...
+        $this->cleanProviders($this->conf['register_providers']);
     }
 
     public function fireEvent($name, array $params = [])
     {
         $params[] = $this->app;
-        return $this->app->events->fire($name, $params);
+        return method_exists($this->app['events'], 'dispatch') ?
+            $this->app['events']->dispatch($name, $params) : $this->app['events']->fire($name, $params);
     }
 
     public function bindRequest(IlluminateRequest $request)
@@ -302,5 +302,12 @@ class Laravel
     public function make($abstract, array $parameters = [])
     {
         return $this->app->make($abstract, $parameters);
+    }
+
+    public function saveSession()
+    {
+        if ($this->app->offsetExists('session')) {
+            $this->app['session']->save();
+        }
     }
 }
