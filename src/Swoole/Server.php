@@ -37,9 +37,6 @@ class Server
         $this->conf = $conf;
         $this->enableWebSocket = !empty($this->conf['websocket']['enable']);
         $this->attachedSockets = empty($this->conf['sockets']) ? [] : $this->conf['sockets'];
-        if (isset($this->conf['event_handlers'])) {
-            $this->conf['event_handlers'] = array_change_key_case($this->conf['event_handlers'], CASE_LOWER);
-        }
 
         $ip = isset($conf['listen_ip']) ? $conf['listen_ip'] : '127.0.0.1';
         $port = isset($conf['listen_port']) ? $conf['listen_port'] : 5200;
@@ -229,7 +226,6 @@ class Server
 
     public function onShutdown(HttpServer $server)
     {
-
     }
 
     public function onManagerStart(HttpServer $server)
@@ -239,7 +235,6 @@ class Server
 
     public function onManagerStop(HttpServer $server)
     {
-
     }
 
     public function onWorkerStart(HttpServer $server, $workerId)
@@ -266,7 +261,6 @@ class Server
 
     public function onWorkerStop(HttpServer $server, $workerId)
     {
-
     }
 
     public function onWorkerError(HttpServer $server, $workerId, $workerPId, $exitCode, $signal)
@@ -283,7 +277,6 @@ class Server
 
     public function onRequest(SwooleRequest $swooleRequest, SwooleResponse $swooleResponse)
     {
-
     }
 
     public function onTask(HttpServer $server, $taskId, $srcWorkerId, $data)
@@ -339,7 +332,6 @@ class Server
 
     protected function fireEvent($event, $interface, array $arguments)
     {
-        $event = strtolower($event);
         if (isset($this->conf['event_handlers'][$event])) {
             $eventHandler = $this->conf['event_handlers'][$event];
             if (!isset(class_implements($eventHandler)[$interface])) {

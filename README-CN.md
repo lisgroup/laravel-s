@@ -9,12 +9,15 @@
 ```
 > 🚀`LaravelS`是一个胶水项目，用于快速集成`Swoole`到`Laravel`或`Lumen`，然后赋予它们更好的性能、更多可能性。
 
+*请`Watch`此仓库，以获得最新的更新。*
+
 [![Latest Stable Version](https://poser.pugx.org/hhxsv5/laravel-s/v/stable.svg)](https://packagist.org/packages/hhxsv5/laravel-s)
 [![Latest Unstable Version](https://poser.pugx.org/hhxsv5/laravel-s/v/unstable.svg)](https://packagist.org/packages/hhxsv5/laravel-s)
 [![Total Downloads](https://poser.pugx.org/hhxsv5/laravel-s/downloads.svg)](https://packagist.org/packages/hhxsv5/laravel-s)
 [![License](https://poser.pugx.org/hhxsv5/laravel-s/license.svg)](https://github.com/hhxsv5/laravel-s/blob/master/LICENSE)
 [![Build Status](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/build.png?b=master)](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/build-status/master)
 [![Code Intelligence Status](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/code-intelligence.svg?b=master)](https://scrutinizer-ci.com/code-intelligence)
+[![Total Lines](https://tokei.rs/b1/github/hhxsv5/laravel-s)](https://github.com/hhxsv5/laravel-s)
 <!-- [![Code Coverage](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/?branch=master) -->
 
 **[English Documentation](https://github.com/hhxsv5/laravel-s/blob/master/README.md)**
@@ -91,7 +94,7 @@ Table of Contents
 
 1.通过[Composer](https://getcomposer.org/)安装([packagist](https://packagist.org/packages/hhxsv5/laravel-s))。有可能找不到`3.0`版本，解决方案移步[#81](https://github.com/hhxsv5/laravel-s/issues/81)。
 ```bash
-composer require "hhxsv5/laravel-s:~3.4.0" -vvv
+composer require "hhxsv5/laravel-s:~3.5.0" -vvv
 # 确保你的composer.lock文件是在版本控制中
 ```
 
@@ -111,11 +114,11 @@ composer require "hhxsv5/laravel-s:~3.4.0" -vvv
     ```
 
 3.发布配置和二进制文件。
-> *每次升级LaravelS后，需重新发布*
+> *每次升级LaravelS后，需重新publish；点击[Release](https://github.com/hhxsv5/laravel-s/releases)去了解各个版本的变更记录。*
 ```bash
 php artisan laravels publish
 # 配置文件：config/laravels.php
-# 二进制文件：bin/laravels bin/fswatch
+# 二进制文件：bin/laravels bin/fswatch bin/inotify
 ```
 
 4.修改配置`config/laravels.php`：监听的IP、端口等，请参考[配置项](https://github.com/hhxsv5/laravel-s/blob/master/Settings-CN.md)。
@@ -123,14 +126,14 @@ php artisan laravels publish
 ## 运行
 > `php bin/laravels {start|stop|restart|reload|info|help}`
 
-`在运行之前，请先仔细阅读：`[注意事项](https://github.com/hhxsv5/laravel-s/blob/master/README-CN.md#%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9)。
+`在运行之前，请先仔细阅读：`[注意事项](https://github.com/hhxsv5/laravel-s/blob/master/README-CN.md#%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9)(非常重要)。
 
 | 命令 | 说明 |
 | --------- | --------- |
 | `start` | 启动LaravelS，展示已启动的进程列表 "*ps -ef&#124;grep laravels*"。支持选项 "*-d&#124;--daemonize*" 以守护进程的方式运行，此选项将覆盖`laravels.php`中`swoole.daemonize`设置；支持选项 "*-e&#124;--env*" 用来指定运行的环境，如`--env=testing`将会优先使用配置文件`.env.testing`，这个特性要求`Laravel 5.2+` |
 | `stop` | 停止LaravelS |
 | `restart` | 重启LaravelS，支持选项 "*-d&#124;--daemonize*" 和 "*-e&#124;--env*" |
-| `reload` | 平滑重启所有Task/Worker/Timer进程(这些进程内包含了你的业务代码)，并触发自定义进程的`onReload`方法，不会重启Master/Manger进程 |
+| `reload` | 平滑重启所有Task/Worker/Timer进程(这些进程内包含了你的业务代码)，并触发自定义进程的`onReload`方法，不会重启Master/Manger进程；修改`config/laravels.php`后，你`只能`调用`restart`来实现重启 |
 | `info` | 显示组件的版本信息 |
 | `help` | 显示帮助信息 |
 
@@ -159,7 +162,7 @@ gzip_comp_level 2;
 gzip_types text/plain text/css text/javascript application/json application/javascript application/x-javascript application/xml application/x-httpd-php image/jpeg image/gif image/png font/ttf font/otf image/svg+xml;
 gzip_vary on;
 gzip_disable "msie6";
-upstream laravels {
+upstream swoole {
     # 通过 IP:Port 连接
     server 127.0.0.1:5200 weight=5 max_fails=3 fail_timeout=30s;
     # 通过 UnixSocket Stream 连接，小诀窍：将socket文件放在/dev/shm目录下，可获得更好的性能
@@ -199,7 +202,7 @@ server {
         proxy_set_header Server-Name $server_name;
         proxy_set_header Server-Addr $server_addr;
         proxy_set_header Server-Port $server_port;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
 }
 ```
@@ -276,7 +279,8 @@ class WebSocketService implements WebSocketHandlerInterface
     }
     public function onOpen(Server $server, Request $request)
     {
-        // 在触发onOpen事件之前Laravel的生命周期已经完结，所以Laravel的Request是可读的，Session是可读写的
+        // 在触发onOpen事件之前，建立WebSocket的HTTP请求已经经过了Laravel的路由，
+        // 所以Laravel的Request、Auth等信息是可读的，Session是可读写的，但仅限在onOpen事件中。
         // \Log::info('New WebSocket connection', [$request->fd, request()->all(), session()->getId(), session('xxx'), session(['yyy' => time()])]);
         $server->push($request->fd, 'Welcome to LaravelS');
         // throw new \Exception('an exception');// 此时抛出的异常上层会忽略，并记录到Swoole日志，需要开发者try/catch捕获处理
@@ -321,7 +325,7 @@ map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
 }
-upstream laravels {
+upstream swoole {
     # 通过 IP:Port 连接
     server 127.0.0.1:5200 weight=5 max_fails=3 fail_timeout=30s;
     # 通过 UnixSocket Stream 连接，小诀窍：将socket文件放在/dev/shm目录下，可获得更好的性能
@@ -366,7 +370,7 @@ server {
         proxy_set_header Server-Port $server_port;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
     location @laravels {
         # proxy_connect_timeout 60s;
@@ -383,7 +387,7 @@ server {
         proxy_set_header Server-Name $server_name;
         proxy_set_header Server-Addr $server_addr;
         proxy_set_header Server-Port $server_port;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
 }
 ```
@@ -648,6 +652,19 @@ class TestCronJob extends CronJob
     ./bin/fswatch ./app
     ```
 
+- 基于`inotifywait`，仅支持Linux。
+
+    1.安装[inotify-tools](https://github.com/rvoicilas/inotify-tools)。
+
+    2.在项目根目录下运行命令。
+
+    ```bash
+    # 监听当前目录
+    ./bin/inotify
+    # 监听app目录
+    ./bin/inotify ./app
+    ```
+
 ## 在你的项目中使用`SwooleServer`实例
 
 ```php
@@ -685,35 +702,56 @@ var_dump($swoole->stats());// 单例
 2.访问Table：所有的Table实例均绑定在`SwooleServer`上，通过`app('swoole')->xxxTable`访问。
 
 ```php
+namespace App\Services;
+use Hhxsv5\LaravelS\Swoole\WebsocketHandlerInterface;
 use Swoole\Http\Request;
 use Swoole\WebSocket\Frame;
 use Swoole\WebSocket\Server;
-
-// 场景：WebSocket中UserId与FD绑定
-public function onOpen(Server $server, Request $request)
+class WebSocketService implements WebSocketHandlerInterface
 {
-    // var_dump(app('swoole') === $server);// 同一实例
-    $userId = mt_rand(1000, 10000);
-    app('swoole')->wsTable->set('uid:' . $userId, ['value' => $request->fd]);// 绑定uid到fd的映射
-    app('swoole')->wsTable->set('fd:' . $request->fd, ['value' => $userId]);// 绑定fd到uid的映射
-    $server->push($request->fd, 'Welcome to LaravelS');
-}
-public function onMessage(Server $server, Frame $frame)
-{
-    foreach (app('swoole')->wsTable as $key => $row) {
-        if (strpos($key, 'uid:') === 0 && $server->exist($row['value'])) {
-            $server->push($row['value'], 'Broadcast: ' . date('Y-m-d H:i:s'));// 广播
+    /**@var \Swoole\Table $wsTable */
+    private $wsTable;
+    public function __construct()
+    {
+        $this->wsTable = app('swoole')->wsTable;
+    }
+    // 场景：WebSocket中UserId与FD绑定
+    public function onOpen(Server $server, Request $request)
+    {
+        // var_dump(app('swoole') === $server);// 同一实例
+        /**
+         * 获取当前登录的用户
+         * 此特性要求建立WebSocket连接的路径要经过Authenticate之类的中间件。
+         * 例如：
+         * 浏览器端：var ws = new WebSocket("ws://127.0.0.1:5200/ws");
+         * 那么Laravel中/ws路由就需要加上类似Authenticate的中间件。
+         */
+        // $user = Auth::user();
+        // $userId = $user ? $user->id : 0; // 0 表示未登录的访客用户
+        $userId = mt_rand(1000, 10000);
+        $this->wsTable->set('uid:' . $userId, ['value' => $request->fd]);// 绑定uid到fd的映射
+        $this->wsTable->set('fd:' . $request->fd, ['value' => $userId]);// 绑定fd到uid的映射
+        $server->push($request->fd, "Welcome to LaravelS #{$request->fd}");
+    }
+    public function onMessage(Server $server, Frame $frame)
+    {
+        // 广播
+        foreach ($this->wsTable as $key => $row) {
+            if (strpos($key, 'uid:') === 0 && $server->isEstablished($row['value'])) {
+                $content = sprintf('Broadcast: new message "%s" from #%d', $frame->data, $frame->fd);
+                $server->push($row['value'], $content);
+            }
         }
     }
-}
-public function onClose(Server $server, $fd, $reactorId)
-{
-    $uid = app('swoole')->wsTable->get('fd:' . $fd);
-    if ($uid !== false) {
-        app('swoole')->wsTable->del('uid:' . $uid['value']);// 解绑uid映射
+    public function onClose(Server $server, $fd, $reactorId)
+    {
+        $uid = $this->wsTable->get('fd:' . $fd);
+        if ($uid !== false) {
+            $this->wsTable->del('uid:' . $uid['value']); // 解绑uid映射
+        }
+        $this->wsTable->del('fd:' . $fd);// 解绑fd映射
+        $server->push($fd, "Goodbye #{$fd}");
     }
-    app('swoole')->wsTable->del('fd:' . $fd);// 解绑fd映射
-    $server->push($fd, 'Goodbye');
 }
 ```
 
@@ -721,7 +759,7 @@ public function onClose(Server $server, $fd, $reactorId)
 
 > 更多的信息，请参考[Swoole增加监听的端口](https://wiki.swoole.com/wiki/page/16.html)与[多端口混合协议](https://wiki.swoole.com/wiki/page/525.html)
 
-为了使我们的主服务器能支持除`HTTP`和`WebSocket`外的更多协议，我们引入了`Swoole`的`多端口混合协议`特性，在LaravelS中称为`Socket`。现在，可以很方便地在`Laravel`上被构建`TCP/UDP`应用。
+为了使我们的主服务器能支持除`HTTP`和`WebSocket`外的更多协议，我们引入了`Swoole`的`多端口混合协议`特性，在LaravelS中称为`Socket`。现在，可以很方便地在`Laravel`上构建`TCP/UDP`应用。
 
 1. 创建Socket处理类，继承`Hhxsv5\LaravelS\Swoole\Socket\{TcpSocket|UdpSocket|Http|WebSocket}`
 
@@ -832,7 +870,7 @@ public function onClose(Server $server, $fd, $reactorId)
     ],
     ```
 
-    - WebSocket
+    - WebSocket：主服务器必须`开启WebSocket`，即需要将`websocket.enable`置为`true`。
     ```php
     'sockets' => [
         [
@@ -853,7 +891,7 @@ public function onClose(Server $server, $fd, $reactorId)
 
 > [Swoole原始文档](https://wiki.swoole.com/wiki/page/749.html)
 
-- 警告：Laravel/Lumen中存在大量单例和静态属性，在协程下是`不安全`的，`不建议`打开协程，但`自定义进程、定时器`中可使用协程。
+- 警告：协程下代码执行顺序是乱序的，请求级的数据应该以协程ID隔离，但Laravel/Lumen中存在很多单例、静态属性，不同请求间的数据会相互影响，这是`不安全`的。比如数据库连接就是单例，同一个数据库连接共享同一个PDO资源，这在同步阻塞模式下是没问题的，但在异步协程下是不行的，每次查询需要创建不同的连接，维护不同的IO状态，这就需要用到连接池。所以`不要`打开协程，仅`自定义进程`中可使用协程。
 
 - 启用协程，默认是关闭的。
     
@@ -901,16 +939,6 @@ public function onClose(Server $server, $fd, $reactorId)
             // 进程名称
             return 'test';
         }
-        public static function isRedirectStdinStdout()
-        {
-            // 是否重定向输入输出
-            return false;
-        }
-        public static function getPipeType()
-        {
-            // 管道类型：0不创建管道，1创建SOCK_STREAM类型管道，2创建SOCK_DGRAM类型管道
-            return 0;
-        }
         public static function callback(Server $swoole, Process $process)
         {
             // 进程运行的代码，不能退出，一旦退出Manager进程会自动再次创建该进程。
@@ -945,7 +973,11 @@ public function onClose(Server $server, $fd, $reactorId)
     // 修改文件 config/laravels.php
     // ...
     'processes' => [
-        \App\Processes\TestProcess::class,
+        [
+            'class'    => \App\Processes\TestProcess::class,
+            'redirect' => false, // 是否重定向输入输出
+            'pipe'     => 0 // 管道类型：0不创建管道，1创建SOCK_STREAM类型管道，2创建SOCK_DGRAM类型管道
+        ],
     ],
     ```
 
@@ -959,11 +991,32 @@ public function onClose(Server $server, $fd, $reactorId)
 
 | 事件 | 需实现的接口 | 发生时机 |
 | -------- | -------- | -------- |
+| BeforeStart | Hhxsv5\LaravelS\Swoole\Events\BeforeStartInterface | 发生在Master进程启动之前，`此事件中不应处理复杂的业务逻辑，只能做一些初始化的简单工作`。|
 | WorkerStart | Hhxsv5\LaravelS\Swoole\Events\WorkerStartInterface | 发生在Worker/Task进程启动时，并且已经完成Laravel初始化 |
 | WorkerStop | Hhxsv5\LaravelS\Swoole\Events\WorkerStopInterface | 发生在Worker/Task进程正常退出时。 |
 | WorkerError | Hhxsv5\LaravelS\Swoole\Events\WorkerErrorInterface | 发生在Worker/Task进程发生异常或致命错误时。 |
 
 1.创建事件处理类，实现相应的接口。
+```php
+namespace App\Events;
+use Hhxsv5\LaravelS\Swoole\Events\BeforeStartInterface;
+use Swoole\Atomic;
+use Swoole\Http\Server;
+class BeforeStartEvent implements BeforeStartInterface
+{
+    public function __construct()
+    {
+    }
+    public function handle(Server $server)
+    {
+        // 初始化一个全局计数器(跨进程的可用)
+        $server->atomicCount = new Atomic(2233);
+
+        // 控制器中调用：app('swoole')->atomicCount->get();
+    }
+}
+```
+
 ```php
 namespace App\Events;
 use Hhxsv5\LaravelS\Swoole\Events\WorkerStartInterface;
@@ -984,6 +1037,7 @@ class WorkerStartEvent implements WorkerStartInterface
 ```php
 // 修改文件 config/laravels.php
 'event_handlers' => [
+    'BeforeStart' => \App\Events\BeforeStartEvent::class,
     'WorkerStart' => \App\Events\WorkerStartEvent::class,
 ],
 ```
@@ -994,9 +1048,7 @@ class WorkerStartEvent implements WorkerStartInterface
     - 传统FPM下，单例模式的对象的生命周期仅在每次请求中，请求开始=>实例化单例=>请求结束后=>单例对象资源回收。
 
     - Swoole Server下，所有单例对象会常驻于内存，这个时候单例对象的生命周期与FPM不同，请求开始=>实例化单例=>请求结束=>单例对象依旧保留，需要开发者自己维护单例的状态。
-
-    - 如果你的项目中使用到了Session、Authentication、JWT，请根据情况解除`laravels.php`中`cleaners`的注释。
-
+    
     - 常见的解决方案：
 
         1. 写一个`XxxCleaner`类来清理单例对象状态，此类需实现接口`Hhxsv5\LaravelS\Illuminate\Cleaners\CleanerInterface`，然后注册到`laravels.php`的`cleaners`中。
@@ -1005,7 +1057,11 @@ class WorkerStartEvent implements WorkerStartInterface
 
         3. 如果是以`ServiceProvider`注册的单例对象，可添加该`ServiceProvider`到`laravels.php`的`register_providers`中，这样每次请求会重新注册该`ServiceProvider`，重新实例化单例对象，[参考](https://github.com/hhxsv5/laravel-s/blob/master/Settings-CN.md)。
 
-- [常见问题](https://github.com/hhxsv5/laravel-s/blob/master/KnownIssues-CN.md)
+    - LaravelS 已经内置了一些[Cleaner](https://github.com/hhxsv5/laravel-s/blob/master/Settings-CN.md)。
+
+- [常见问题](https://github.com/hhxsv5/laravel-s/blob/master/KnownIssues-CN.md)：一揽子的已知问题和解决方案。
+
+- 调试方式：记录日志、[Laravel Dump Server](https://github.com/beyondcode/laravel-dump-server)（Laravel 5.7已默认集成）
 
 - 应通过`Illuminate\Http\Request`对象来获取请求信息，$_ENV是可读取的，$_SERVER是部分可读的，`不能使用`$_GET、$_POST、$_FILES、$_COOKIE、$_REQUEST、$_SESSION、$GLOBALS。
 
@@ -1022,7 +1078,7 @@ class WorkerStartEvent implements WorkerStartInterface
     }
     ```
 
-- 推荐通过返回`Illuminate\Http\Response`对象来响应请求，兼容echo、vardump()、print_r()，`不能使用`函数像 dd()、exit()、die()、header()、setcookie()、http_response_code()。
+- 推荐通过返回`Illuminate\Http\Response`对象来响应请求，兼容echo、vardump()、print_r()，`不能使用`函数 dd()、exit()、die()、header()、setcookie()、http_response_code()。
 
     ```php
     public function json()
@@ -1099,7 +1155,7 @@ class WorkerStartEvent implements WorkerStartInterface
 
 ## 用户与案例
 
-- [KuCoin](https://www.kcs.top/ucenter/signup?rcode=Kyv3hd)
+- [KuCoin](https://www.kcs.top/ucenter/signup?rcode=vHR6yH)
 
 - [医联](https://www.medlinker.com/)：WEB站、M站、APP、小程序的账户体系服务。
     
@@ -1167,6 +1223,9 @@ class WorkerStartEvent implements WorkerStartInterface
 | *洋 | 20 |
 | *洋 | 20 |
 | *强 | 50 |
+| Anthony | 18.88 |
+| *官龙 | 100 |
+| 0o飞舞o0木木 *科 | 288 |
 
 ## License
 

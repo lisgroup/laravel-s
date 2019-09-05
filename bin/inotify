@@ -7,9 +7,11 @@ fi
 echo "Restarting LaravelS..."
 ./bin/laravels restart -d -i
 
-echo "Starting fswatch..."
+echo "Starting inotifywait..."
 LOCKING=0
-fswatch -e ".*" -i "\\.php$" -r ${WORK_DIR} | while read file
+
+inotifywait --event modify --event create --event move --event delete -mrq   ${WORK_DIR}  | while read file
+
 do
     if [[ ! ${file} =~ .php$ ]] ;then
         continue

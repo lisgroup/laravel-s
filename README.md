@@ -7,7 +7,9 @@
 |______\__,_|_|  \__,_| \_/ \___|_|_____/ 
                                            
 ```
-> 🚀`LaravelS` is a glue that is used to quickly integrate `Swoole` into `Laravel` or `Lumen` and then give them better performance and more possibilities.
+> 🚀`LaravelS` is like a glue that is used to quickly integrate `Swoole` into `Laravel` or `Lumen`, and then give them better performance and more possibilities.
+
+*Please `Watch` this repository to get the latest updates.*
 
 [![Latest Stable Version](https://poser.pugx.org/hhxsv5/laravel-s/v/stable.svg)](https://packagist.org/packages/hhxsv5/laravel-s)
 [![Latest Unstable Version](https://poser.pugx.org/hhxsv5/laravel-s/v/unstable.svg)](https://packagist.org/packages/hhxsv5/laravel-s)
@@ -15,6 +17,7 @@
 [![License](https://poser.pugx.org/hhxsv5/laravel-s/license.svg)](https://github.com/hhxsv5/laravel-s/blob/master/LICENSE)
 [![Build Status](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/build.png?b=master)](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/build-status/master)
 [![Code Intelligence Status](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/code-intelligence.svg?b=master)](https://scrutinizer-ci.com/code-intelligence)
+<!-- [![Total Lines](https://tokei.rs/b1/github/hhxsv5/laravel-s)](https://github.com/hhxsv5/laravel-s) -->
 <!-- [![Code Coverage](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/hhxsv5/laravel-s/?branch=master) -->
 
 **[中文文档](https://github.com/hhxsv5/laravel-s/blob/master/README-CN.md)**
@@ -45,6 +48,7 @@ Table of Contents
 * [Important notices](#important-notices)
 * [Users and cases](https://github.com/hhxsv5/laravel-s/blob/master/README-CN.md#%E7%94%A8%E6%88%B7%E4%B8%8E%E6%A1%88%E4%BE%8B)
 * [Alternatives](#alternatives)
+* [Support Us](#support-us)
 * [License](#license)
 
 ## Features
@@ -85,7 +89,7 @@ Table of Contents
 
 1.Require package via [Composer](https://getcomposer.org/)([packagist](https://packagist.org/packages/hhxsv5/laravel-s)).
 ```bash
-composer require "hhxsv5/laravel-s:~3.4.0" -vvv
+composer require "hhxsv5/laravel-s:~3.5.0" -vvv
 # Make sure that your composer.lock file is under the VCS
 ```
 
@@ -105,11 +109,11 @@ composer require "hhxsv5/laravel-s:~3.4.0" -vvv
     ```
 
 3.Publish configuration and binaries.
-> *Suggest that do publish after upgrade LaravelS every time*
+> *After upgrading LaravelS, you need to republish; click [here](https://github.com/hhxsv5/laravel-s/releases) to see the change notes of each version.*
 ```bash
 php artisan laravels publish
 # Configuration: config/laravels.php
-# Binary: bin/laravels bin/fswatch
+# Binary: bin/laravels bin/fswatch bin/inotify
 ```
 
 4.Change `config/laravels.php`: listen_ip, listen_port, refer [Settings](https://github.com/hhxsv5/laravel-s/blob/master/Settings.md).
@@ -117,14 +121,14 @@ php artisan laravels publish
 ## Run
 > `php bin/laravels {start|stop|restart|reload|info|help}`
 
-`Please read the notices carefully before running`, [Important notices](https://github.com/hhxsv5/laravel-s#important-notices).
+`Please read the notices carefully before running`, [Important notices](https://github.com/hhxsv5/laravel-s#important-notices)(IMPORTANT).
 
 | Command | Description |
 | --------- | --------- |
 | `start` | Start LaravelS, list the processes by "*ps -ef&#124;grep laravels*". Support the option "*-d&#124;--daemonize*" to run as a daemon; Support the option "*-e&#124;--env*" to specify the environment to run, such as `--env=testing` will use the configuration file `.env.testing` firstly, this feature requires `Laravel 5.2+` |
 | `stop` | Stop LaravelS |
 | `restart` | Restart LaravelS, support the options "*-d&#124;--daemonize*" and "*-e&#124;--env*" |
-| `reload` | Reload all Task/Worker/Timer processes which contain your business codes, and trigger the method `onReload` of Custom process, CANNOT reload Master/Manger processes |
+| `reload` | Reload all Task/Worker/Timer processes which contain your business codes, and trigger the method `onReload` of Custom process, CANNOT reload Master/Manger processes. After modifying `config/laravels.php`, you can `only` call `restart` to restart |
 | `info` | Display component version information |
 | `help` | Display help information |
 
@@ -153,7 +157,7 @@ gzip_comp_level 2;
 gzip_types text/plain text/css text/javascript application/json application/javascript application/x-javascript application/xml application/x-httpd-php image/jpeg image/gif image/png font/ttf font/otf image/svg+xml;
 gzip_vary on;
 gzip_disable "msie6";
-upstream laravels {
+upstream swoole {
     # Connect IP:Port
     server 127.0.0.1:5200 weight=5 max_fails=3 fail_timeout=30s;
     # Connect UnixSocket Stream file, tips: put the socket file in the /dev/shm directory to get better performance
@@ -193,7 +197,7 @@ server {
         proxy_set_header Server-Name $server_name;
         proxy_set_header Server-Addr $server_addr;
         proxy_set_header Server-Port $server_port;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
 }
 ```
@@ -270,7 +274,8 @@ class WebSocketService implements WebSocketHandlerInterface
     }
     public function onOpen(Server $server, Request $request)
     {
-        // Laravel has finished its lifetime before triggering onOpen event, so Laravel's Request & Session are available here, Request is readable only, Session is readable & writable both.
+        // Before the onOpen event is triggered, the HTTP request to establish the WebSocket has passed the Laravel route, 
+        // so Laravel's Request, Auth information is readable, and Session is readable and writable, but only in the onOpen event.
         // \Log::info('New WebSocket connection', [$request->fd, request()->all(), session()->getId(), session('xxx'), session(['yyy' => time()])]);
         $server->push($request->fd, 'Welcome to LaravelS');
         // throw new \Exception('an exception');// all exceptions will be ignored, then record them into Swoole log, you need to try/catch them
@@ -313,7 +318,7 @@ map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
 }
-upstream laravels {
+upstream swoole {
     # Connect IP:Port
     server 127.0.0.1:5200 weight=5 max_fails=3 fail_timeout=30s;
     # Connect UnixSocket Stream file, tips: put the socket file in the /dev/shm directory to get better performance
@@ -358,7 +363,7 @@ server {
         proxy_set_header Server-Port $server_port;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
     location @laravels {
         # proxy_connect_timeout 60s;
@@ -375,7 +380,7 @@ server {
         proxy_set_header Server-Name $server_name;
         proxy_set_header Server-Addr $server_addr;
         proxy_set_header Server-Port $server_port;
-        proxy_pass http://laravels;
+        proxy_pass http://swoole;
     }
 }
 ```
@@ -633,6 +638,20 @@ class TestCronJob extends CronJob
     ./bin/fswatch ./app
     ```
 
+- Via `inotifywait`, support Linux.
+
+    1.Install [inotify-tools](https://github.com/rvoicilas/inotify-tools).
+
+    2.Run command in your project root directory.
+
+    ```bash
+    # Watch current directory
+    ./bin/inotify
+    # Watch app directory
+    ./bin/inotify ./app
+    ```
+
+
 ## Get the instance of `SwooleServer` in your project
 
 ```php
@@ -668,35 +687,58 @@ var_dump($swoole->stats());// Singleton
 ```
 
 2.Access `Table`: all table instances will be bound on `SwooleServer`, access by `app('swoole')->xxxTable`.
+
 ```php
+namespace App\Services;
+use Hhxsv5\LaravelS\Swoole\WebsocketHandlerInterface;
 use Swoole\Http\Request;
 use Swoole\WebSocket\Frame;
 use Swoole\WebSocket\Server;
-// Scene：bind UserId & FD in WebSocket
-public function onOpen(Server $server, Request $request)
+class WebSocketService implements WebSocketHandlerInterface
 {
-    // var_dump(app('swoole') === $server);// The same instance
-    $userId = mt_rand(1000, 10000);
-    app('swoole')->wsTable->set('uid:' . $userId, ['value' => $request->fd]);// Bind map uid to fd
-    app('swoole')->wsTable->set('fd:' . $request->fd, ['value' => $userId]);// Bind map fd to uid
-    $server->push($request->fd, 'Welcome to LaravelS');
-}
-public function onMessage(Server $server, Frame $frame)
-{
-    foreach (app('swoole')->wsTable as $key => $row) {
-        if (strpos($key, 'uid:') === 0 && $server->exist($row['value'])) {
-            $server->push($row['value'], 'Broadcast: ' . date('Y-m-d H:i:s'));// Broadcast
+    /**@var \Swoole\Table $wsTable */
+    private $wsTable;
+    public function __construct()
+    {
+        $this->wsTable = app('swoole')->wsTable;
+    }
+    // Scene：bind UserId & FD in WebSocket
+    public function onOpen(Server $server, Request $request)
+    {
+        // var_dump(app('swoole') === $server);// The same instance
+        /**
+         * Get the currently logged in user
+         * This feature requires that the path to establish a WebSocket connection go through middleware such as Authenticate.
+         * E.g:
+         * Browser side: var ws = new WebSocket("ws://127.0.0.1:5200/ws");
+         * Then the /ws route in Laravel needs to add the middleware like Authenticate.
+         */
+        // $user = Auth::user();
+        // $userId = $user ? $user->id : 0; // 0 means a guest user who is not logged in
+        $userId = mt_rand(1000, 10000);
+        $this->wsTable->set('uid:' . $userId, ['value' => $request->fd]);// Bind map uid to fd
+        $this->wsTable->set('fd:' . $request->fd, ['value' => $userId]);// Bind map fd to uid
+        $server->push($request->fd, "Welcome to LaravelS #{$request->fd}");
+    }
+    public function onMessage(Server $server, Frame $frame)
+    {
+        // Broadcast
+        foreach ($this->wsTable as $key => $row) {
+            if (strpos($key, 'uid:') === 0 && $server->isEstablished($row['value'])) {
+                $content = sprintf('Broadcast: new message "%s" from #%d', $frame->data, $frame->fd);
+                $server->push($row['value'], $content);
+            }
         }
     }
-}
-public function onClose(Server $server, $fd, $reactorId)
-{
-    $uid = app('swoole')->wsTable->get('fd:' . $fd);
-    if ($uid !== false) {
-        app('swoole')->wsTable->del('uid:' . $uid['value']); // Unbind uid map
+    public function onClose(Server $server, $fd, $reactorId)
+    {
+        $uid = $this->wsTable->get('fd:' . $fd);
+        if ($uid !== false) {
+            $this->wsTable->del('uid:' . $uid['value']); // Unbind uid map
+        }
+        $this->wsTable->del('fd:' . $fd);// Unbind fd map
+        $server->push($fd, "Goodbye #{$fd}");
     }
-    app('swoole')->wsTable->del('fd:' . $fd);// Unbind fd map
-    $server->push($fd, 'Goodbye');
 }
 ```
 
@@ -816,7 +858,7 @@ To make our main server support more protocols not just Http and WebSocket, we b
     ],
     ```
 
-    - WebSocket
+    - WebSocket: The main server must `turn on WebSocket`, that is, set `websocket.enable` to `true`.
     ```php
     'sockets' => [
         [
@@ -836,7 +878,7 @@ To make our main server support more protocols not just Http and WebSocket, we b
 
 > [Swoole Coroutine](https://www.swoole.co.uk/coroutine)
 
-- Warning: There are a large number of singletons and static properties in Laravel/Lumen, which are `unsafe` in coroutine. It is `NOT` recommended to enable coroutine, but coroutine can be used in `custom processes and cron job`.
+- Warning: The order of code execution in the coroutine is out of order. The data of the request level should be isolated by the coroutine ID. However, there are many singleton and static attributes in Laravel/Lumen, the data between different requests will affect each other, it's `Unsafe`. For example, the database connection is a singleton, the same database connection shares the same PDO resource. This is fine in the synchronous blocking mode, but it does not work in the asynchronous coroutine mode. Each query needs to create different connections and maintain IO state of different connections, which requires a connection pool. So `DO NOT` enable the coroutine, only the custom process can use the coroutine.
 
 - Enable Coroutine, default disable.
     
@@ -885,16 +927,6 @@ To make our main server support more protocols not just Http and WebSocket, we b
             // The name of process
             return 'test';
         }
-        public static function isRedirectStdinStdout()
-        {
-            // Whether redirect stdin/stdout
-            return false;
-        }
-        public static function getPipeType()
-        {
-            // The type of pipeline: 0 no pipeline, 1 SOCK_STREAM, 2 SOCK_DGRAM
-            return 0;
-        }
         public static function callback(Server $swoole, Process $process)
         {
             // The callback method cannot exit. Once exited, Manager process will automatically create the process 
@@ -929,7 +961,11 @@ To make our main server support more protocols not just Http and WebSocket, we b
     // Edit `config/laravels.php`
     // ...
     'processes' => [
-        \App\Processes\TestProcess::class,
+        [
+            'class'    => \App\Processes\TestProcess::class,
+            'redirect' => false, // Whether redirect stdin/stdout, true or false
+            'pipe'     => 0 // The type of pipeline, 0: no pipeline 1: SOCK_STREAM 2: SOCK_DGRAM
+        ],
     ],
     ```
 
@@ -943,11 +979,32 @@ Supported events:
 
 | Event | Interface | When happened |
 | -------- | -------- | -------- |
+| BeforeStart | Hhxsv5\LaravelS\Swoole\Events\BeforeStartInterface | Occurs before the Master process starts, `this event should not handle complex business logic, and can only do some simple work of initialization`. |
 | WorkerStart | Hhxsv5\LaravelS\Swoole\Events\WorkerStartInterface | Occurs when the Worker/Task process starts, and the Laravel initialization has been completed. |
 | WorkerStop | Hhxsv5\LaravelS\Swoole\Events\WorkerStopInterface | Occurs when the Worker/Task process exits normally. |
 | WorkerError | Hhxsv5\LaravelS\Swoole\Events\WorkerErrorInterface | Occurs when an exception or fatal error occurs in the Worker/Task process. |
 
 1.Create an event class to implement the corresponding interface.
+```php
+namespace App\Events;
+use Hhxsv5\LaravelS\Swoole\Events\BeforeStartInterface;
+use Swoole\Atomic;
+use Swoole\Http\Server;
+class BeforeStartEvent implements BeforeStartInterface
+{
+    public function __construct()
+    {
+    }
+    public function handle(Server $server)
+    {
+        // Initialize a global counter (available across processes)
+        $server->atomicCount = new Atomic(2233);
+
+        // Invoked in controller: app('swoole')->atomicCount->get();
+    }
+}
+```
+
 ```php
 namespace App\Events;
 use Hhxsv5\LaravelS\Swoole\Events\WorkerStartInterface;
@@ -968,6 +1025,7 @@ class WorkerStartEvent implements WorkerStartInterface
 ```php
 // Edit `config/laravels.php`
 'event_handlers' => [
+    'BeforeStart' => \App\Events\BeforeStartEvent::class,
     'WorkerStart' => \App\Events\WorkerStartEvent::class,
 ],
 ```
@@ -978,9 +1036,7 @@ class WorkerStartEvent implements WorkerStartInterface
 
     - Under FPM mode, singleton instances will be instantiated and recycled in every request, request start=>instantiate instance=>request end=>recycled instance.
 
-    - Under Swoole Server, All singleton instances will be held in memory, different lifetime from FPM, request start=>instantiate instance=>request end=>do not recycle singleton instance. So need developer to maintain status of singleton instances in ervery request.
-
-    - If Session/Authentication/JWT is used in your project, please uncomment the `cleaners` in `laravels.php` as appropriate.
+    - Under Swoole Server, All singleton instances will be held in memory, different lifetime from FPM, request start=>instantiate instance=>request end=>do not recycle singleton instance. So need developer to maintain status of singleton instances in every request.
 
     - Common solutions:
 
@@ -988,9 +1044,13 @@ class WorkerStartEvent implements WorkerStartInterface
 
         2. `Reset` status of singleton instances by `Middleware`.
 
-        1. Re-register `ServiceProvider`, add `XxxServiceProvider` into `register_providers` of file `laravels.php`. So that reinitialize singleton instances in ervery request [Refer](https://github.com/hhxsv5/laravel-s/blob/master/Settings.md).
+        1. Re-register `ServiceProvider`, add `XxxServiceProvider` into `register_providers` of file `laravels.php`. So that reinitialize singleton instances in every request [Refer](https://github.com/hhxsv5/laravel-s/blob/master/Settings.md).
+    
+    - LaravelS has built in some [Cleaners](https://github.com/hhxsv5/laravel-s/blob/master/Settings.md).
 
-- [Known issues](https://github.com/hhxsv5/laravel-s/blob/master/KnownIssues.md)
+- [Known issues](https://github.com/hhxsv5/laravel-s/blob/master/KnownIssues.md): a package of known issues and solutions.
+
+- Debugging method: Logging, [Laravel Dump Server](https://github.com/beyondcode/laravel-dump-server)(Laravel 5.7 has been integrated by default).
 
 - Should get all request information from `Illuminate\Http\Request` Object, $_ENV is readable, $_SERVER is partially readable, `CANNOT USE` $_GET/$_POST/$_FILES/$_COOKIE/$_REQUEST/$_SESSION/$GLOBALS.
 
@@ -1086,6 +1146,15 @@ class WorkerStartEvent implements WorkerStartInterface
 ## Alternatives
 
 - [swooletw/laravel-swoole](https://github.com/swooletw/laravel-swoole)
+
+## Support us
+
+| Currency | Address |
+| -------- | -------- |
+| BTC | 3KX6LTJcbgiKKaHGC7zySVdMmFXvjikQ3U |
+| ETH | 0xccab8324d33a978a7ac040049e09100029123d71 |
+| LTC | LPhrmK1ZvjnP3ckd9j6QQV7BvjzjrWyTes |
+| USDT | 18dhqenUw3ib3QUzUxXJ1WdCa4tZus4cv3 |
 
 ## License
 

@@ -4,6 +4,7 @@ namespace Hhxsv5\LaravelS;
 
 use Hhxsv5\LaravelS\Illuminate\Laravel;
 use Hhxsv5\LaravelS\Swoole\DynamicResponse;
+use Hhxsv5\LaravelS\Swoole\Events\BeforeStartInterface;
 use Hhxsv5\LaravelS\Swoole\Events\WorkerErrorInterface;
 use Hhxsv5\LaravelS\Swoole\Events\WorkerStartInterface;
 use Hhxsv5\LaravelS\Swoole\Events\WorkerStopInterface;
@@ -35,17 +36,8 @@ class LaravelS extends Server
     /**
      * Fix conflicts of traits
      */
-    use InotifyTrait, LaravelTrait, LogTrait, ProcessTitleTrait, TimerTrait, CustomProcessTrait {
-        LogTrait::log insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::logException insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::trace insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::info insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::warning insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::error insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LogTrait::callWithCatchException insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        ProcessTitleTrait::setProcessTitle insteadof InotifyTrait, TimerTrait, CustomProcessTrait;
-        LaravelTrait::initLaravel insteadof TimerTrait, CustomProcessTrait;
-    }
+    use InotifyTrait, LaravelTrait, LogTrait, ProcessTitleTrait, TimerTrait, CustomProcessTrait;
+
     /**@var array */
     protected $laravelConf;
 
@@ -66,10 +58,16 @@ class LaravelS extends Server
             $inotifyCfg['watch_path'] = $this->laravelConf['root_path'];
         }
         $inotifyCfg['process_prefix'] = $svrConf['process_prefix'];
-        $this->swoole->inotifyProcess = $this->addInotifyProcess($this->swoole, $inotifyCfg);
+        $this->swoole->inotifyProcess = $this->addInotifyProcess($this->swoole, $inotifyCfg, $this->laravelConf);
 
         $processes = isset($this->conf['processes']) ? $this->conf['processes'] : [];
         $this->swoole->customProcesses = $this->addCustomProcesses($this->swoole, $svrConf['process_prefix'], $processes, $this->laravelConf);
+
+        // Fire BeforeStart event
+        if (isset($this->conf['event_handlers']['BeforeStart'])) {
+            Laravel::autoload($this->laravelConf['root_path']);
+            $this->fireEvent('BeforeStart', BeforeStartInterface::class, [$this->swoole]);
+        }
     }
 
     protected function bindWebSocketEvent()
@@ -87,6 +85,7 @@ class LaravelS extends Server
                 // Start Laravel's lifetime, then support session ...middleware.
                 $laravelRequest = $this->convertRequest($this->laravel, $request);
                 $this->laravel->bindRequest($laravelRequest);
+                $this->laravel->cleanProviders();
                 $this->laravel->handleDynamic($laravelRequest);
                 $eventHandler('onOpen', func_get_args());
                 $this->laravel->saveSession();
@@ -119,6 +118,8 @@ class LaravelS extends Server
     public function onWorkerError(HttpServer $server, $workerId, $workerPId, $exitCode, $signal)
     {
         parent::onWorkerError($server, $workerId, $workerPId, $exitCode, $signal);
+
+        Laravel::autoload($this->laravelConf['root_path']);
 
         // Fire WorkerError event
         $this->fireEvent('WorkerError', WorkerErrorInterface::class, func_get_args());
@@ -192,6 +193,7 @@ class LaravelS extends Server
 
     protected function handleDynamicResource(Laravel $laravel, IlluminateRequest $laravelRequest, SwooleResponse $swooleResponse)
     {
+        $laravel->cleanProviders();
         $laravelResponse = $laravel->handleDynamic($laravelRequest);
         $laravelResponse->headers->set('Server', $this->conf['server'], true);
         $laravel->fireEvent('laravels.generated_response', [$laravelRequest, $laravelResponse]);
